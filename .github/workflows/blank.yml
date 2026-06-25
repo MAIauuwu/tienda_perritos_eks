@@ -55,7 +55,10 @@ jobs:
       run: |
         aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
 
-    # 6. Aplicar todos los archivos YAML que están dentro de tu carpeta k8s
+    # 6. Aplicar todos los archivos YAML ordenadamente
     - name: Deploy Manifests to EKS
       run: |
-        kubectl apply -f k8s/
+        kubectl apply -f k8s/namespace.yaml
+        
+        sleep 5
+                kubectl apply -f k8s/
