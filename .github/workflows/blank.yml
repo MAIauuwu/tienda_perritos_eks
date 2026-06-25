@@ -1,0 +1,61 @@
+name: Deploy Tienda Perritos to Amazon EKS
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER_NAME: devopseks              # El clúster que acabas de crear con éxito
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Clonar el código de tu GitHub
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # 2. Conectarse a AWS con tus Secrets actualizados
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    # 3. Autenticarse en Amazon ECR
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    # 4. Compilar y subir las TRES imágenes de tus carpetas
+    - name: Build and Push Images to ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        # 1. FRONTEND (Busca el Dockerfile dentro de la carpeta frontend)
+        docker build -t $ECR_REGISTRY/tienda-frontend:latest ./frontend
+        docker push $ECR_REGISTRY/tienda-frontend:latest
+        
+        # 2. BACKEND (Busca el Dockerfile dentro de la carpeta backend)
+        docker build -t $ECR_REGISTRY/tienda-backend:latest ./backend
+        docker push $ECR_REGISTRY/tienda-backend:latest
+        
+        # 3. BASE DE DATOS (Busca el Dockerfile dentro de la carpeta db)
+        docker build -t $ECR_REGISTRY/tienda-db:latest ./db
+        docker push $ECR_REGISTRY/tienda-db:latest
+
+    # 5. Conectarse al clúster de Kubernetes
+    - name: Update kubeconfig for EKS
+      run: |
+        aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+
+    # 6. Aplicar todos los archivos YAML que están dentro de tu carpeta k8s
+    - name: Deploy Manifests to EKS
+      run: |
+        kubectl apply -f k8s/
